@@ -1,0 +1,55 @@
+---
+- hosts: master
+  vars:
+    go_version: "1.18.3"
+    go_tar_file: "go{{ go_version }}.linux-amd64.tar.gz"
+    go_download_url: "https://go.dev/dl/{{ go_tar_file }}"
+
+  tasks:
+    - name: Install necessary packages
+      apt:
+        name: git
+        state: latest
+
+    - name: Download Go binary release
+      get_url:
+        url: "{{ go_download_url }}"
+        dest: "/tmp/{{ go_tar_file }}"
+        mode: 0755
+
+    - name: Extract the Go binary
+      unarchive:
+        src: "/tmp/{{ go_tar_file }}"
+        dest: "{{ ansible_env.HOME }}"
+        remote_src: yes
+
+    - name: Add Go binaries to PATH
+      lineinfile:
+        path: "{{ ansible_env.HOME }}/.profile"
+        line: 'export PATH=$PATH:{{ ansible_env.HOME }}/go/bin'
+
+    - name: Apply environment changes
+      shell: source "{{ ansible_env.HOME }}/.profile"
+
+    - name: Check Go version
+      command: go version
+      register: go_version_output
+
+    - debug: var=go_version_output.stdout_lines
+
+    - name: Install controller runtime
+      block:
+        - name: Get GOPATH
+          shell: go env GOPATH
+          register: go_env_output
+
+        - name: Clone Kubernetes repository
+          git:
+            repo: 'https://github.com/kubernetes/kubernetes.git'
+            dest: '{{ ansible_env.HOME }}/kubernetes'
+
+        - name: Create directories and clone controller-runtime repository
+          command: |
+            cp -R  {{ ansible_env.HOME }}/kubernetes/staging/src/k8s.io {{ go_env_output.stdout }}/src/k8s.io
+            mkdir -p {{ go_env_output.stdout }}/src/sigs.k8s.io
+            git clone https://github.com/kubernetes-sigs/controller-runtime {{ go_env_output.stdout }}/src/sigs.k8s.io

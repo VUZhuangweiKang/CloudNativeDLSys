@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: manager
+  labels:
+    app: manager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: manager
+  template:
+    metadata:
+      labels:
+        app: manager
+    spec:
+      containers:
+      - name: manager
+        image: zhuangweikang/cndlsys-dev:manager
+        imagePullPolicy: Always
+        command: ["/bin/sh","-c"]
+        ports:
+        - name: listen-port
+          containerPort: 50051
+        stdin: true
+        tty: true
+        volumeMounts:
+        - name: configuration
+          mountPath: /configs
+        - name: local-nfs-ssd
+          mountPath: /mnt/nfs/local
+      volumes:
+        - name: configuration
+          configMap:
+            name: cndlsys-config
+        - name: local-nfs-ssd
+          hostPath: 
+            path: /nfs/ssd
+            type: Directory

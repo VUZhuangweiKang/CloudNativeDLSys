@@ -1,0 +1,17 @@
+boto3
+grpcio
+configparser
+pickle-mixin
+pymongo
+protobuf<=3.20.*
+pytz
+nvidia-ml-py3
+pandas
+dask
+kubernetes
+h2o==3.40.0.3
+scipy
+zmq
+psutil
+scikit-learn
+hyperopt

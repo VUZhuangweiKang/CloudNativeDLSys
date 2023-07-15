@@ -1,0 +1,26 @@
+---
+- hosts: master
+  gather_facts: no
+  tasks:
+  - name: Get nodes
+    shell: kubectl get nodes | awk '(NR>1) { print $1 }'
+    register: nodes_output
+
+  - name: Convert nodes output to list
+    set_fact:
+      nodes_list: "{{ nodes_output.stdout.split(' ') }}"
+
+  - name: Label nodes
+    command: kubectl label nodes --overwrite {{ item }} db=mongo
+    with_items: "{{ nodes_list }}"
+    ignore_errors: yes
+
+  - name: Apply k8s configurations
+    shell: kubectl apply -k ./scripts/
+
+  - name: Wait until all mongo pods are running
+    shell: kubectl get pods -l app=mongo -o jsonpath='{range .items[*]}{.status.phase}{"\n"}{end}'
+    register: pod_status
+    until: pod_status.stdout.split() | select('equalto', 'Running') | list | length == pod_status.stdout.split() | length
+    retries: 20
+    delay: 3

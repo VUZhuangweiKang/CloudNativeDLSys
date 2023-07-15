@@ -1,0 +1,30 @@
+apiVersion: "cilium.io/v2"
+kind: CiliumNetworkPolicy
+metadata:
+  name:
+spec:
+  endpointSelector:
+    matchLabels:
+      app:  # Change this to the label of your pod
+  ingress:
+  - toPorts:  # This matches any ingress traffic
+    - ports:
+      - port: "0"
+        protocol: TCP
+      - port: "0"
+        protocol: UDP
+    rules:
+      l7proto: any
+  egress:
+  - toPorts:  # This matches any egress traffic
+    - ports:
+      - port: "0"
+        protocol: TCP
+      - port: "0"
+        protocol: UDP
+    rules:
+      l7proto: any
+  ingressBandwidth:
+    rate:
+  egressBandwidth:
+    rate:

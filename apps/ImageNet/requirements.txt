@@ -1,0 +1,13 @@
+torch
+torchvision
+boto3
+pymongo
+zmq
+numpy==1.25.0
+pillow
+pandas
+grpcio
+protobuf
+opencv-python
+albumentations
+albumentations[extra]

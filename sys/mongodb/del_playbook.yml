@@ -1,0 +1,34 @@
+---
+- name: Delete MongoDB
+  hosts: master
+  tasks:
+    - name: Get nodes
+      shell: kubectl get nodes | awk '(NR>1) { print $1 }'
+      register: nodes_output
+    - name: Convert nodes output to list
+      set_fact:
+        nodes_list: "{{ nodes_output.stdout.split(' ') }}"
+    - name: Delete MongoDB
+      shell: kubectl delete -k scripts
+      ignore_errors: yes
+    - name: Remove Label
+      command: kubectl label nodes {{ item }} db-
+      with_items: "{{ nodes_list }}"
+      ignore_errors: yes
+
+- name: Remove and recreate directory
+  hosts: all
+  gather_facts: no
+  tasks:
+    - name: Remove directory
+      file:
+        path: /mnt/data
+        state: absent
+      become: true
+
+    - name: Create directory
+      file:
+        path: /mnt/data
+        state: directory
+        mode: '0755'
+      become: true

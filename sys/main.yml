@@ -1,0 +1,49 @@
+---
+- import_playbook: nfs/playbook.yml
+- import_playbook: mongodb/del_playbook.yml
+- import_playbook: mongodb/init_playbook.yml
+- import_playbook: prometheus/del_playbook.yml
+- import_playbook: prometheus/init_playbook.yml
+- import_playbook: go/playbook.yml
+
+
+- hosts: master
+  name: deploy the system
+  gather_facts: false
+  tasks:
+    - name: Install python libraries
+      pip:
+        name:
+          - ansible
+        executable: pip3
+        state: present
+      ignore_errors: true
+      
+    - name: Execute mongo admin command
+      shell: kubectl exec mongo-0 -n default -- mongo admin --eval "$(cat mongodb/init.js)"
+
+    - name: install global
+      shell: kubectl apply -f global/
+
+    - name: install frontend
+      shell: kubectl apply -f frontend/
+    
+    - name: Install python libraries
+      pip:
+        name:
+          - kubernetes
+        executable: pip3
+        state: present
+      ignore_errors: true
+    - name: install manager
+      shell: python3 deploy.py
+      args:
+        chdir: manager
+    
+    - name: create manager service
+      shell: kubectl apply -f manager/svc.yaml
+    
+    - name: create manager-worker
+      shell: python3 deploy.py
+      args:
+        chdir: manager-worker

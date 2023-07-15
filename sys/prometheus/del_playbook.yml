@@ -1,0 +1,7 @@
+---
+- hosts: master
+  gather_facts: no
+  tasks:
+  - name: Delete Kubernetes resources
+    shell: kubectl delete -f scripts
+    ignore_errors: true

@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: manager-worker
+  labels:
+    app: manager-worker
+spec:
+  selector:
+    matchLabels:
+      app: manager-worker
+  template:
+    metadata:
+      labels:
+        app: manager-worker
+    spec:
+      containers:
+      - name: manager-worker
+        image: zhuangweikang/cndlsys-dev:manager-worker
+        imagePullPolicy: Always
+        command: ["python3", "Worker.py"]
+        # command: ["/bin/bash"]
+        ports:
+        - name: listen-port
+          containerPort: 50052
+        volumeMounts:
+        - name: configuration
+          mountPath: /configs
+        - name: local-nfs-hdd
+          mountPath: /mnt/nfs/hdd/local
+        - name: local-nfs-ssd
+          mountPath: /mnt/nfs/ssd/local
+        stdin: true
+        tty: true
+        env:
+        - name: NODE_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.hostIP
+      volumes:
+        - name: configuration
+          configMap:
+            name: cndlsys-config
+            items:
+            - key: commons.conf
+              path: commons.conf
+            - key: dbus.conf
+              path: dbus.conf
+        - name: local-nfs-ssd
+          hostPath: 
+            path: /nfs/ssd
+            type: Directory
+        - name: local-nfs-hdd
+          hostPath: 
+            path: /nfs/hdd
+            type: Directory

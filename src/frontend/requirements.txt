@@ -1,0 +1,8 @@
+flask
+jsonschema
+grpcio
+pymongo
+configparser
+boto3
+protobuf<=3.20.*
+zmq

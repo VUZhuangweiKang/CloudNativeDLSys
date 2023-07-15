@@ -1,0 +1,6 @@
+apiVersion: docgroup.com/v1alpha1
+kind: DLTDeployment
+metadata:
+  name: dltdeployment-sample
+spec:
+  # TODO(user): Add fields here

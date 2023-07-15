@@ -1,0 +1,76 @@
+---
+- hosts: all
+  become: yes
+  tasks:
+    - name: Update APT package manager repositories
+      apt:
+        update_cache: yes
+
+    - name: Install required dependencies
+      apt:
+        name: 
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - software-properties-common
+        state: present
+
+    - name: Install Docker and containerd
+      apt:
+        name:
+          - docker.io
+          - containerd
+        state: present
+
+    - name: Add user to Docker group
+      user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: yes
+
+    - name: Add Kubernetes apt-key
+      apt_key:
+        url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+        state: present
+
+    - name: Add Kubernetes repository
+      apt_repository:
+        repo: "deb http://apt.kubernetes.io/ kubernetes-xenial main"
+        state: present
+
+    - name: Install specific version of Kubernetes components
+      apt:
+        name:
+          - kubeadm=1.26.0-00
+          - kubelet=1.26.0-00
+          - kubectl=1.26.0-00
+        state: present
+
+    - name: Hold Kubernetes components at current version
+      command:
+        cmd: apt-mark hold kubeadm kubelet kubectl
+        warn: false
+
+    - name: Check kubeadm version
+      command: kubeadm version
+
+    - name: Disable swap
+      command: swapoff -a
+
+    - name: Reload systemd manager configuration
+      systemd:
+        daemon_reload: yes
+
+    - name: Restart Docker
+      service:
+        name: docker
+        state: restarted
+
+    # - name: Download Helm installation script
+    #   get_url:
+    #     url: https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3
+    #     dest: get_helm.sh
+    #     mode: '0700'
+
+    # - name: Install Helm
+    #   command: /bin/sh get_helm.sh

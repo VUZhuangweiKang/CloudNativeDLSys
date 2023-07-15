@@ -1,0 +1,142 @@
+syntax = "proto3";
+package dbus;
+
+enum RC {
+    CONNECTED = 0;
+    NO_USER = 1;
+    WRONG_PASSWORD = 2;
+    DISCONNECTED = 3;
+    FAILED = 4;
+    DEPLOYED = 5;
+}
+
+message S3Auth {
+    string aws_access_key_id = 1;
+    string aws_secret_access_key = 2;
+    string region_name = 3;
+}
+message Credential {
+    string username = 1;
+    string password = 2;
+    S3Auth s3auth = 3;
+}
+
+// set up connection between user and GM
+message ConnectRequest {
+    Credential cred = 1;
+    bool createUser = 2;
+}
+message ConnectResponse {
+    RC rc = 1;
+    string resp = 2;
+}
+
+// register a DLT Client (DLTC) to the Global Manager (GM)
+message ResourceRequirement {
+    int64 GPU = 1;
+    int64 CPU = 2;
+    int64 Memory = 3;
+}
+message Dataset {
+    repeated string samples = 1;
+    repeated string targets = 2;
+    repeated string manifests = 3;
+}
+message JobDatasets {
+    Dataset train = 1;
+    Dataset validation = 2;
+    Dataset test = 3;
+}
+message DataSource {
+    string name = 1;
+    string bucket = 2;
+    JobDatasets keys = 3;
+}
+message DeployRequest {
+    string name = 1;  // DLTDeployment ID
+    Credential credential = 2;
+    bool gangScheduling = 3;
+    string jobs = 4;
+}
+message DeployResponse {
+    RC rc = 1;
+    string resp = 2;
+}
+
+// When key is not available, CC request GM to update policy
+message DataMissRequest {
+    string etag = 1;
+}
+message DataMissResponse {
+    bool response = 1;
+}
+
+message WorkerJoinRequest {
+    string node_ip = 1;
+    string worker_ip = 2;
+}
+message WorkerJoinResponse {
+    bool rc = 1;
+}
+
+message DownloadFileRequest {
+    S3Auth s3auth = 1;
+    string bucket = 2;
+    repeated string keys = 3;
+    repeated string destinations = 4;
+}
+message DownloadFileResponse {
+    repeated float sizes = 1;
+    repeated float costs = 2;
+}
+message ExtractFileRequest {
+    repeated string sources = 1;
+    repeated string destinations = 2;
+}
+message ExtractFileResponse {
+    repeated float costs = 1;
+}
+message MergeFileRequest {
+    string etag = 1;
+    int32 blockSize = 2;
+    int64 numSamples = 3;
+}
+message BlockInfo {
+    string name = 1;
+    int32 length = 2;
+}
+message MergeFileResponse {
+    bool rc = 1;
+    repeated BlockInfo blocks = 2;
+    string error = 3;
+}
+
+message MoveChunkRequest {
+    string src = 1;
+    string dst = 2;
+}
+message MoveChunkResponse {
+    bool success = 1;
+}
+
+message InspectChunkRequest {
+    string chunk_path = 1;
+}
+
+message InspectChunkResponse {
+    int64 total_size = 1;
+    int32 file_count = 2;
+}
+
+message DelChunkRequest {
+    string etag = 1;
+    bool delete_source = 2;
+}
+
+message DelChunkResponse {
+    string response = 1;
+}
+
+message DelDLTPodRequest {
+    string dltpod = 1;
+}

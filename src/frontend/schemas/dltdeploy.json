@@ -1,0 +1,59 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions":{
+        "strings": {
+            "type": "array",
+            "items": {
+                "type": ["string", "null"]
+            }
+        },
+        "dataset":{
+            "items": {
+                "type": "string"
+            },
+            "type": "array"
+        },
+        "datasource": {
+            "properties": {
+                "name": {"type": "string"},
+                "bucket": {"type": "string"},
+                "keys": {
+                    "type": "object",
+                    "properties": {
+                        "train": {"$ref": "#/definitions/dataset"},
+                        "validation": {"$ref": "#/definitions/dataset"},
+                        "test": {"$ref": "#/definitions/dataset"}
+                    },
+                    "required": ["train"]
+                }
+            },
+            "required": ["bucket", "keys"],
+            "type": "object"
+        },
+        "job": {
+            "properties": {
+                "name": {"type": "string"},
+                "workerContainer": {"$ref": "file:./schemas/container.json"},
+                "numWorkers": {"type": "integer", "default": 1},
+                "datasource": {"$ref": "#/definitions/datasource"}
+            },
+            "required": ["name", "workerContainer"],
+            "type": "object"
+        }
+    },
+    "properties": {
+        "name": {"type": "string"},
+        "credential": {"$ref": "file:./schemas/credential.json"},
+        "gangScheduling": {
+            "type": "boolean",
+            "default": false
+        },
+        "datasource": {"$ref": "#/definitions/datasource"},
+        "jobs": {
+            "type": "array",
+            "items": {"$ref": "#/definitions/job"}
+        }
+    },
+    "required": ["name", "credential", "jobs"],
+    "type": "object"
+}

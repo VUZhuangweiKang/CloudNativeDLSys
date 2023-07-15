@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: manager
+  labels:
+    app: manager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: manager
+  template:
+    metadata:
+      labels:
+        app: manager
+    spec:
+      containers:
+      - name: manager
+        image: zhuangweikang/cndlsys-dev:manager
+        imagePullPolicy: Always
+        ports:
+        - name: listen-port
+          containerPort: 50051
+        env:
+        - name: NODE_IPS
+          value: "{{- printf \"%s\" \"$(kubectl get nodes -o jsonpath='{.items[*].status.addresses[?(@.type==\\\"InternalIP\\\")].address}')\" }}"
+        volumeMounts:
+        - name: configuration
+          mountPath: /configs/manager
+        - name: local-nfs
+          mountPath: /mnt/nfs/local
+{{- range $index, $node := (split "," (env "NODE_IPS")) }}
+        - name: nfs-{{ $index }}
+          mountPath: /mnt/nfs/{{ $node }}
+{{- end }}
+      volumes:
+        - name: configuration
+          configMap:
+            name: dlcpod-manager-config
+        - name: local-nfs
+          hostPath: 
+            path: /nfs
+            type: Directory
+{{- range $index, $node := (split "," (env "NODE_IPS")) }}
+        - name: nfs-{{ $index }}
+          nfs:
+            server: {{ $node }}
+            path: /mnt/nfs/{{ $node }}
+{{- end }}

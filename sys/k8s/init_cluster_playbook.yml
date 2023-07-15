@@ -1,0 +1,89 @@
+---
+- name: Reset K8s cluster
+  hosts: all
+  tasks:
+    - name: Reset Kubernetes
+      shell: kubeadm reset -f
+      ignore_errors: true
+      become: true
+
+    - name: Delete network files and virtual interfaces
+      shell: rm -rf /etc/cni/net.d
+      become: true
+      ignore_errors: true
+    
+    - name: Delete kubeconfig files
+      shell: rm -rf {{ ansible_env.HOME }}/.kube/config
+      become: true
+      ignore_errors: true
+    
+    - name: Delete kube-bridge
+      become: yes
+      command: ip link delete kube-bridge
+
+- name: Configure Kubernetes Cluster
+  hosts: master
+  tasks:
+    - name: Initialize Kubernetes Cluster
+      shell: kubeadm init --pod-network-cidr=10.244.0.0/16
+      register: kubeadm_output
+      become: true
+
+    - name: Create .kube directory
+      shell: mkdir -p {{ ansible_env.HOME }}/.kube
+      become: false
+
+    - name: Copy kube config file
+      shell: cp -i /etc/kubernetes/admin.conf {{ ansible_env.HOME }}/.kube/config
+      become: true
+    
+    - name: update authority
+      shell: chown {{ ansible_user_uid }}:{{ ansible_user_gid }} {{ ansible_env.HOME }}/.kube/config
+      become: true
+
+    - name: Install kube-router CNI
+      shell: kubectl apply -f https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/daemonset/kubeadm-kuberouter.yaml
+      become: false
+
+    - name: Print join command token
+      shell: kubeadm token create --print-join-command
+      register: join_command_output
+      run_once: true
+
+    - debug:
+        var: join_command_output.stdout_lines
+
+- name: Join Kubernetes Cluster
+  hosts: worker
+  become: true
+  tasks:
+    - name: Join Kubernetes Cluster
+      shell: "{{ hostvars['master-1']['join_command_output']['stdout'] }}"
+      become: true
+
+- name: Enable CPU Manager
+  hosts: worker
+  become: yes
+  tasks:
+    - name: Stop kubelet
+      systemd:
+        name: kubelet
+        state: stopped
+
+    - name: Remove cpu_manager_state
+      file:
+        path: /var/lib/kubelet/cpu_manager_state
+        state: absent
+
+    - name: Update kubeadm-flags.env
+      copy:
+        content: 'KUBELET_KUBEADM_ARGS="--container-runtime-endpoint=unix:///var/run/containerd/containerd.sock --pod-infra-container-image=registry.k8s.io/pause:3.9 --cpu-manager-policy=static --kube-reserved=cpu=1,memory=2Gi,ephemeral-storage=1Gi --system-reserved=cpu=1,memory=2Gi,ephemeral-storage=1Gi"'
+        dest: /var/lib/kubelet/kubeadm-flags.env
+
+    - name: Reload systemd
+      command: systemctl daemon-reload
+
+    - name: Restart kubelet
+      systemd:
+        name: kubelet
+        state: restarted

@@ -1,0 +1,52 @@
+{
+    "title" : "Datasets",    
+    "bsonType": "object",
+    "required": ["Bucket", "Key", "ETag", "Location", "Size"],
+    "properties": {
+        "Bucket": {"bsonType": "string"}, 
+        "Key": {"bsonType": "string"},
+        "ETag": {"bsonType": "string"},
+        "Location": {"bsonType": "string"},
+        "SourceLocation": {"bsonType": "string"},
+        "Size": {"bsonType": ["long", "int", "double"]},
+        "ChunkSize": {"bsonType": ["long", "int", "double"]},
+        "Blocks": {
+            "bsonType":  "array",
+            "items":{
+                "bsonType":"object",
+                "properties": {
+                    "Name": {"bsonType":  "string"},
+                    "Length": {"bsonType": "int"}
+                }
+            }
+        },
+        "Cost": {"bsonType": "int"},
+        "Category": {
+            "enum": ["train", "validation", "test"]
+        },
+        "ExistOnSSD": {"bsonType": "bool"},
+        "ExistOnHDD": {"bsonType": "bool"},
+        "Status": {
+            "bsonType": "object",
+            "required": ["code"],
+            "properties": {
+                "code": {"bsonType": "int"},
+                "active_count": {"bsonType": ["int", "null"]},
+                "cool_down_init": {"bsonType": ["timestamp", "null"]}
+            }
+        },
+        "LastModified": {"bsonType": "timestamp"},
+        "InitTime": {"bsonType": "timestamp"},
+        "References": {
+            "bsonType": "array",
+            "items": {"bsonType": ["timestamp", "null"]}
+        },
+        "Jobs": {
+            "bsonType": "array",
+            "items": {"bsonType": "string"}
+        },
+        "DownloadLatency": {"bsonType":  "int"},
+        "ExtractionLatency": {"bsonType":  "int"}
+    },
+    "additionalProperties": true
+}

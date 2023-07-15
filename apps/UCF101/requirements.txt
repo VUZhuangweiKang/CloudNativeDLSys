@@ -1,0 +1,15 @@
+av
+torch
+torchvision
+boto3
+pymongo
+zmq
+tqdm
+timm
+numpy==1.25.0
+pillow
+pandas
+grpcio
+protobuf
+albumentations
+albumentations[extra]

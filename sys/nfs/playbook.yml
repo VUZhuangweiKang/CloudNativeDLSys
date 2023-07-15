@@ -1,0 +1,52 @@
+---
+- name: Configure NFS Server
+  hosts: all
+  become: true
+  tasks:
+    - name: Get primary interface
+      shell: ip route | grep default | awk '{print $5}'
+      register: primary_interface
+
+    - name: Get CIDR
+      shell: ip addr show | grep "{{ primary_interface.stdout }}" | grep -w inet | grep -oP "\d+\.\d+\.\d+\.\d+/\d+"
+      register: cidr
+
+    - name: Install nfs-kernel-server and cachefilesd
+      apt:
+        name: nfs-kernel-server,cachefilesd
+        state: present
+
+    - name: Create directories for NFS shares
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0777'
+      loop:
+        - /nfs/ssd
+        - /nfs/hdd
+
+    - name: Add NFS exports
+      lineinfile:
+        dest: /etc/exports
+        line: "{{ item.path }} {{ cidr.stdout }}(rw,sync,no_root_squash)"
+      loop:
+        - { path: '/nfs/ssd' }
+        - { path: '/nfs/hdd' }
+      notify: Restart NFS server
+
+    - name: Set cachefilesd configuration
+      lineinfile:
+        dest: /etc/default/cachefilesd
+        line: "RUN=yes"
+      notify: Start cachefilesd
+
+  handlers:
+    - name: Restart NFS server
+      systemd:
+        name: nfs-kernel-server
+        state: restarted
+
+    - name: Start cachefilesd
+      systemd:
+        name: cachefilesd
+        state: started

@@ -1,0 +1,30 @@
+---
+- hosts: master
+  gather_facts: no
+  tasks:    
+  - name: Apply monitoring.yml
+    shell: kubectl apply -f ./scripts/monitoring.yaml
+
+  - name: Apply pv-pvc.yaml
+    shell: kubectl apply -f ./scripts/pv-pvc.yaml
+
+  - name: Apply cluster-roles.yaml
+    shell: kubectl apply -f ./scripts/cluster-roles.yaml
+
+  - name: Apply service-account.yaml
+    shell: kubectl apply -f ./scripts/service-account.yaml
+
+  - name: Apply configmap.yaml
+    shell: kubectl apply -f ./scripts/configmap.yaml
+
+  - name: Apply kube-state-metrics.yaml
+    shell: kubectl apply -f ./scripts/kube-state-metrics.yaml
+
+  - name: Apply daemonset.yaml
+    shell: kubectl apply -f ./scripts/daemonset.yaml
+
+  - name: Apply deployment.yaml
+    shell: kubectl apply -f ./scripts/deployment.yaml
+
+  - name: Apply service.yaml
+    shell: kubectl apply -f ./scripts/service.yaml

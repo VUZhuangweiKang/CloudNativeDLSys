@@ -1,0 +1,24 @@
+# permissions for end users to edit dltdeployments.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: dltdeployment-editor-role
+rules:
+- apiGroups:
+  - docgroup.com
+  resources:
+  - dltdeployments
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - docgroup.com
+  resources:
+  - dltdeployments/status
+  verbs:
+  - get

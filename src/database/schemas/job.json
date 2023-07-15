@@ -1,0 +1,79 @@
+{
+    "title" : "Job",
+    "bsonType": "object",
+    "required": ["Meta", "Status", "ChunkETags"],
+    "properties": {
+        "Meta": {
+            "bsonType": "object",
+            "required": [
+                "Username",
+                "JobId",
+                "DLTDeployId",
+                "Datasource"
+            ],
+            "properties": {
+                "Username": {"bsonType": "string"},
+                "JobId": {"bsonType": "string"},
+                "DLTDeployId": {"bsonType": "string"},
+                "Datasource": {
+                    "bsonType": "object",
+                    "required": [
+                        "name",
+                        "bucket",
+                        "keys"
+                    ],
+                    "properties": {
+                        "name": {"bsonType": "string"},
+                        "bucket": {"bsonType": "string"},
+                        "keys": {
+                            "bsonType": "object",
+                            "properties": {
+                                "train": {"bsonType": "array", "items": {"bsonType": "string"}},
+                                "validation": {"bsonType": "array", "items": {"bsonType": "string"}},
+                                "test": {"bsonType": "array", "items": {"bsonType": "string"}}
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "Status": {
+            "bsonType": "string",
+            "enum": ["pending", "ready", "running", "done"]
+        },
+        "ChunkETags": {
+            "bsonType": "object",
+            "properties": {
+                "train": {"bsonType": "array", "items": {"bsonType": "string"}},
+                "validation": {"bsonType": "array", "items": {"bsonType": "string"}},
+                "test": {"bsonType": "array", "items": {"bsonType": "string"}}
+            }
+        },
+        "Nodes": {
+            "bsonType": "array", 
+            "items": {"bsonType": "string"}
+        },
+        "Performance": {
+            "bsonType": "array",
+            "items": {
+                "bsonType": "object",
+                "properties": {
+                    "worker": {"bsonType": "string"},
+                    "values": {
+                        "bsonType": "object",
+                        "properties": {
+                            "NumDataLoadingWorkers": {"bsonType": "int"},
+                            "NumCores": {"bsonType": "int"},
+                            "BatchSize": {"bsonType": "int"},
+                            "HasDataStall": {"bsonType": "bool"},
+                            "DataLoadingTime": {"bsonType": "double"},
+                            "ComputingTime": {"bsonType": "double"},
+                            "IOTime": {"bsonType": "double"},
+                            "ProcessingTime": {"bsonType": "double"}
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

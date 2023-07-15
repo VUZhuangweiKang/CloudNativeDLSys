@@ -1,0 +1,42 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cndlsys-config
+  namespace: default
+data:
+  commons.conf: |
+    [data]
+    hdd_base_dir=/mnt/nfs/hdd
+    ssd_base_dir=/mnt/nfs/ssd
+
+  dbus.conf: |
+    [manager]
+    hostname=manager
+    port=50051
+    
+    [worker]
+    port=50052
+
+  manager.conf: |    
+    [data_eviction]
+    attenuation=2
+    step=0.5
+    
+    [scheduler]
+    frequency=5
+
+  mongodb.conf: |
+    [client]
+    username=docgroup
+    password=docgroup
+    host=mongo
+    port=27017
+    db=CNDLSys
+
+  client.conf: |
+    [zmq]
+    init_channel=ipc:///share/init.ipc
+    ipc_channel=ipc:///share/runtime.ipc
+    
+    [data]
+    cooldown_sec=600

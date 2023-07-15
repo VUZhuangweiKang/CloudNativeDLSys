@@ -1,0 +1,4 @@
+threadpool_size,block_size,batch_completion_time
+1,1,1.309583825409097
+4,220,1.4299122133278495
+1,20,1.330829781514627

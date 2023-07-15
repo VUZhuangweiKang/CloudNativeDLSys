@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name:
+  labels:
+    app: 
+spec:
+  restartPolicy: Never
+  nodeSelector:
+    kubernetes.io/hostname: 
+  containers:
+    - name: ioperf
+      image: zhuangweikang/cndlsys-dev:ioperf
+      imagePullPolicy: Always
+      command:
+      # command: ["bash"]
+      env:
+        - name: CONTROLLER
+          value:
+        - name: NODE
+          value: 
+      volumeMounts:
+        - name: nfs-volume
+          mountPath: /mnt/nfs
+        - name: local-volume
+          mountPath: /mnt/local
+      tty: true
+      stdin: true
+      securityContext:
+        privileged: true
+  volumes:
+    - name: nfs-volume
+      nfs:
+        server: 
+        path: /nfs/ssd
+    - name: local-volume
+      hostPath:
+        path: /nfs/ssd

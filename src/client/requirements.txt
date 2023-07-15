@@ -1,0 +1,9 @@
+grpcio
+protobuf<=3.20.*
+pickle-mixin
+numpy
+nvidia-ml-py3
+pymongo
+zmq
+pyfastcopy
+boto3
