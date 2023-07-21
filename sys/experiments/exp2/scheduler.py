@@ -9,7 +9,7 @@ from copy import deepcopy
 import argparse
 
 
-def sort_nodes_by_weights(resources, job, ssd: bool, gang: bool = False):
+def sort_nodes_by_weights(resources, job, ssd: bool, job_idx: bool = False):
     # Principle: place as much data on the same node with the DL job as possible, but also avoid fragmenting nodes
     job['chunks'].sort(key=lambda item: item['Size'], reverse=True)
     storage_dev = 'ssd' if ssd else 'hdd'
@@ -44,12 +44,11 @@ def sort_nodes_by_weights(resources, job, ssd: bool, gang: bool = False):
     # 4. 计算每个node的weight
     weights = defaultdict(float)
     for node in nodes_list:
-        # since the cluster doesn't have gpu, so now we use cpu
         term1 = resources['gpu'][node] >= job['gpu'] and resources['cpu'][node] >= job['cpu']
         if term1:
-            # 1e6 is for avoiding the case: node1(1, 0, 0), node2: (0, 1, 0)
-            term1 += 1e-6
-        if gang and term1:
+            # 1e-9 is for avoiding the case: node1(1, 0, 0), node2: (0, 1, 0)
+            term1 += 1e-9
+        if job_idx == 0 and term1:
             term1 *= (resources['gpu'][node]) / sum(list(resources['gpu'].values()))
 
         # term2: percentage of existing chunks on this node
@@ -71,12 +70,23 @@ def sort_nodes_by_weights(resources, job, ssd: bool, gang: bool = False):
     return weights
 
 
-def bf_nodes_weights(resources):
+def wf_nodes_weights(resources, job, job_idx):
     nodes_list = list(resources['gpu'].keys())
     weights = defaultdict(float)
-    total_cpus = sum([resources['cpu'][node] for node in nodes_list])
-    total_gpus = sum([resources['gpu'][node] for node in nodes_list])
+    filtered_nodes = []
     for node in nodes_list:
+        if job_idx == 0:
+            if resources['cpu'][node] >= job['cpu'] and resources['gpu'][node] >= job['gpu'] and resources['ssd'][node] >= sum([chunk['ChunkSize'] for chunk in job['chunks']]):
+                filtered_nodes.append(node)
+        else:
+            if resources['cpu'][node] >= job['cpu'] and resources['gpu'][node] >= job['gpu']:
+                filtered_nodes.append(node)
+                
+    total_cpus = sum([resources['cpu'][node] for node in filtered_nodes])
+    total_gpus = sum([resources['gpu'][node] for node in filtered_nodes])
+    total_space = sum([resources['ssd'][node] for node in filtered_nodes])
+    
+    for node in filtered_nodes:
         if total_cpus == 0:
             term1 = 0
         else:
@@ -88,51 +98,128 @@ def bf_nodes_weights(resources):
             term2 = resources['gpu'][node] / total_gpus
         
         weights[node] = term1 + term2
+        if job_idx == 0:
+            weights[node] += resources['ssd'][node] / total_space
+            
     weights = list(weights.items())
     weights.sort(key=lambda item: item[1], reverse=True)
     return weights
 
+def bf_nodes_weights(resources, job, job_idx):
+    weights = defaultdict(float)
+    nodes_list = list(resources['gpu'].keys())
+    filtered_nodes = []
+    for node in nodes_list:
+        if job_idx == 0:
+            if resources['cpu'][node] >= job['cpu'] and resources['gpu'][node] >= job['gpu'] and resources['ssd'][node] >= sum([chunk['ChunkSize'] for chunk in job['chunks']]):
+                filtered_nodes.append(node)
+        else:
+            if resources['cpu'][node] >= job['cpu'] and resources['gpu'][node] >= job['gpu']:
+                filtered_nodes.append(node)
+    total_cpus = sum([resources['cpu'][node] for node in filtered_nodes])
+    total_gpus = sum([resources['gpu'][node] for node in filtered_nodes])
+    total_space = sum([resources['ssd'][node] for node in filtered_nodes])
+    
+    for node in filtered_nodes:
+        if total_cpus == 0:
+            term1 = 0
+        else:
+            term1 = resources['cpu'][node] / total_cpus
+            
+        if total_gpus == 0:
+            term2 = 0
+        else:
+            term2 = resources['gpu'][node] / total_gpus
+        
+        weights[node] = term1 + term2
+        if job_idx == 0:
+            weights[node] += resources['ssd'][node] / total_space
+        
+    weights = list(weights.items())
+    weights.sort(key=lambda item: item[1])
+    return weights
 
-def ff_nodes_weights(resources, job):
+
+def ff_nodes_weights(resources, job, job_idx):
     nodes_list = list(resources['gpu'].keys())
     weights = {node: 0 for node in nodes_list}
     for node in nodes_list:
-        if resources['cpu'][node] >= job['cpu'] and resources['gpu'][node] >= job['gpu']:
-            weights[node] += 1
-            break
+        if job_idx == 0:
+            if resources['cpu'][node] >= job['cpu'] and resources['gpu'][node] >= job['gpu'] and resources['ssd'][node] >= sum([chunk['ChunkSize'] for chunk in job['chunks']]):
+                weights[node] += 1
+                break
+        else:
+            if resources['cpu'][node] >= job['cpu'] and resources['gpu'][node] >= job['gpu']:
+                weights[node] += 1
+                break
     weights = list(weights.items())
     weights.sort(key=lambda item: item[1], reverse=True)
     return weights
 
 
+def csa_nodes_weights(resources, job, job_idx):
+    nodes_list = list(resources['gpu'].keys())
+    filter_nodes = []
+    for node in nodes_list:
+        if job_idx == 0:
+            if resources['cpu'][node] >= job['cpu'] and resources['gpu'][node] >= job['gpu'] and resources['ssd'][node] >= sum([chunk['ChunkSize'] for chunk in job['chunks']]):
+                filter_nodes.append(node)
+        else:
+            if resources['cpu'][node] >= job['cpu'] and resources['gpu'][node] >= job['gpu']:
+                filter_nodes.append(node)
+
+    exist_chunks_on_node = {node: 0 for node in filter_nodes}
+    if len(exist_chunks_on_node) == 0:
+        exist_chunks_on_node = {node: 0 for node in filter_nodes}
+        weights = list(exist_chunks_on_node.items())
+        random.shuffle(weights)
+        return weights
+    
+    for chunk in job['chunks']:
+        size = chunk['ChunkSize']
+        exist = chunk['ExistOnSSD']
+        if exist:
+            loc = chunk['Location']
+            if loc in filter_nodes:
+                exist_chunks_on_node[loc] += size
+            
+    weights = list(exist_chunks_on_node.items())
+    weights.sort(key=lambda item: item[1], reverse=True)
+    max_weight = weights[0][1]
+    nodes_with_max_weight = [tpl for tpl in weights if tpl[1]==max_weight]
+    random_sel_node = random.choice(nodes_with_max_weight)[0]
+    weights = [(tpl[0], tpl[0]==random_sel_node) for tpl in weights]
+    return weights
+    
+    
 # Job and Data placement strategy for (1 job/ 1 worker) use case
-def base_placement(resources, job, ssd: bool = True, worker_idx=None, gang: bool = False, scheduler=None, data_place_alg=None):
+def base_placement(resources, job, ssd: bool = True, worker_idx=None, job_idx: int = 0, scheduler=None, data_place_alg=None):
     storage_dev = 'ssd' if ssd else 'hdd'
 
     # although we have sorted the nodes list, it doesn't guarantee the job can be deployed
     if scheduler == 'ff':
-        node_weights = ff_nodes_weights(resources, job)
+        node_weights = ff_nodes_weights(resources, job, job_idx)
     elif scheduler == "bf":
-        node_weights = bf_nodes_weights(resources)
+        node_weights = bf_nodes_weights(resources, job, job_idx)
+    elif scheduler == "wf":
+        node_weights = wf_nodes_weights(resources, job, job_idx)
+    elif scheduler == 'csa':
+        node_weights = csa_nodes_weights(resources, job, job_idx)
     else:
-        node_weights = sort_nodes_by_weights(resources, job, ssd, gang=gang)
+        node_weights = sort_nodes_by_weights(resources, job, ssd, job_idx=job_idx)
 
     request_gpu = job['gpu']
     request_cpu = job['cpu']
 
     placement = None
     for node, weight in node_weights:
-        assert node is not None
         if resources['gpu'][node] >= request_gpu and resources['cpu'][node] >= request_cpu:
-            resources['gpu'][node] -= request_gpu
-            resources['cpu'][node] -= request_cpu
             placement = node
             break
 
     if placement is None:
-        return np.inf  # computation resource is not enough for deploying the job
-    else:
-        job['location'] = [placement]
+        # print(request_cpu, request_gpu, resources)
+        return 1e9  # computation resource is not enough for deploying the job
 
     # compute the storage gap when placing chunks
     resource_gap = 0
@@ -147,28 +234,30 @@ def base_placement(resources, job, ssd: bool = True, worker_idx=None, gang: bool
             else:
                 chunk['ExistOnHDD'] = True
 
-            all_nodes = [item[0] for item in node_weights]
-            if data_place_alg != 'random':
-                # locality-aware data placement
-                flag = False
-                for node, weight in node_weights:
-                    if resources[storage_dev][node] >= s:
-                        resources[storage_dev][node] -= s
-                        if ssd:
-                            chunk['Location'] = node
-                        else:
-                            chunk['SourceLocation'] = node
-                        flag = True
-                        break
-                if not flag:
-                    resource_gap += chunk['ChunkSize']
-            else:
-                # TODO: selected node might can't hold the chunk
-                sel_node = all_nodes[i % len(all_nodes)]
-                if ssd:
-                    chunk['Location'] = sel_node
-                else:
-                    chunk['SourceLocation'] = sel_node
+            # all_nodes = [item[0] for item in node_weights]
+            # if data_place_alg != 'random':
+            # locality-aware data placement
+            
+            flag = False
+            for node, weight in node_weights:
+                if resources[storage_dev][node] >= s:
+                    resources[storage_dev][node] -= s
+                    if ssd:
+                        chunk['Location'] = node
+                    else:
+                        chunk['SourceLocation'] = node
+                    flag = True
+                    break
+            if not flag:
+                resource_gap += chunk['ChunkSize']
+            
+            # else:
+            #     # TODO: selected node might can't hold the chunk
+            #     sel_node = all_nodes[i % len(all_nodes)]
+            #     if ssd:
+            #         chunk['Location'] = sel_node
+            #     else:
+            #         chunk['SourceLocation'] = sel_node
 
         if worker_idx is not None:
             worker_name = f"{job['dltdeploy_id']}-{job['job_id']}-{worker_idx}"
@@ -176,75 +265,124 @@ def base_placement(resources, job, ssd: bool = True, worker_idx=None, gang: bool
                 chunk['Jobs'] = []
             chunk['Jobs'].append(worker_name)
 
-    # reset
-    # for chunk in job['chunks']:
-    #     chunk['ExistOnHDD'] = False
-    #     chunk['ExistOnSSD'] = False
+    if resource_gap == 0 and placement is not None:
+        job['location'] = [placement]
+        resources['gpu'][placement] -= request_gpu
+        resources['cpu'][placement] -= request_cpu
 
     return resource_gap
 
 
 # Data placement strategy for (1 job / N worker) use case
-def multi_worker_placement(resources, job, ssd: bool = True, gang: bool = False, scheduler=None, data_place_alg=None):
+def multi_worker_placement(resources, job, ssd: bool = True, job_idx: int = 0, scheduler=None, data_place_alg=None):
     resource_gap = 0
     num_workers = job['numWorkers']
     chunks_group = np.array_split(job['chunks'], num_workers)
     workers_placement = []
     job['numWorkers'] = 1
+    processed_chunks = []
+    job_cpy = deepcopy(job)
     for i in range(num_workers):
         job['chunks'] = chunks_group[i].tolist()
-        gap = base_placement(resources, job, ssd, worker_idx=i, gang=gang, scheduler=scheduler, data_place_alg=data_place_alg)
-        chunks_group[i] = job['chunks']
-        workers_placement.extend(job['location'])
-        if gap > 0:
+        gap = base_placement(resources, job, ssd, worker_idx=i, job_idx=job_idx, scheduler=scheduler, data_place_alg=data_place_alg)
+        resource_gap += gap
+        if gap == 0:
+            processed_chunks.extend(job['chunks'])
+            workers_placement.extend(job['location'])
+        elif gap == 1e9: # caused by gpu, cpu
+            break
+        else: # caused by storage
+            workers_placement.extend(job['location'])
             break
     
     # revoke resources assigned to previous deployable workers
     if resource_gap > 0:
-        print(workers_placement)
         for worker in workers_placement:
+            # print(f"revoke {job['gpu']} gpu {job['cpu']} cpu from worker {worker}, gap: {resource_gap}")
             resources['cpu'][worker] += job['cpu']
             resources['gpu'][worker] += job['gpu']
-            
+            for chunk in job['chunks']:
+                chunk['ExistOnHDD'] = False
+                chunk['ExistOnSSD'] = False
+        
+        for chunk in processed_chunks:
+            # print(chunk['Location'])
+            if chunk['Location'] is not None:
+                resources['ssd'][chunk['Location']] += chunk['ChunkSize']
+
+        job = job_cpy
+        return resource_gap
+
     job['numWorkers'] = num_workers
     job['chunks'] = [item for sublist in chunks_group for item in sublist]
     job['location'] = workers_placement
     return resource_gap
 
 
-def multi_job_placement(resources, jobs, ssd: bool = True, scheduler=None, data_place_alg=None):
-    if scheduler == 'ours':
+def multi_job_placement(resources, log, running_jobs, ssd: bool = True, scheduler=None, data_place_alg=None, sort_jobs=False):
+    jobs, submit_time = log['jobs'], log['submit_time']
+    submit_time = datetime.strptime(submit_time, "%Y-%m-%d %H:%M:%S")
+    if sort_jobs or scheduler == 'ours':
         jobs.sort(key=lambda job: job['numWorkers'])
 
-    resource_gaps = []
     chunks_placement = None
-    for i, job in enumerate(jobs):
+    
+    i = 0
+    while i < len(jobs):
+        
+        # collect resources from finished jobs
+        running_jobs.sort(key=lambda hist_job: datetime.strptime(hist_job['end_time'], "%Y-%m-%d %H:%M:%S"))
+        while len(running_jobs) > 0:
+            if submit_time >= datetime.strptime(running_jobs[0]['end_time'], "%Y-%m-%d %H:%M:%S"):
+                hist_job = running_jobs.pop(0)
+                assert len(hist_job['location']) == hist_job['numWorkers']
+                for j in range(hist_job['numWorkers']):
+                    loc = hist_job['location'][j]
+                    cluster['cpu'][loc] += hist_job['cpu']
+                    cluster['gpu'][loc] += hist_job['gpu']
+
+                if hist_job['last']:
+                    for chunk in hist_job['chunks']:
+                        cluster['ssd'][chunk['Location']] += chunk['ChunkSize']
+                    results.append(hist_job)
+            else:
+                break
+                
+        job = jobs[i]
+        if job['deployed']:
+            submit_time = submit_time + timedelta(seconds=10)
+            i += 1
+            continue
+        
         if i > 0:
             job['chunks'] = deepcopy(chunks_placement)
 
-        resource_gap = multi_worker_placement(resources, job, ssd, gang=(i == 0), scheduler=scheduler, data_place_alg=data_place_alg)    
-        resource_gaps.append(resource_gap)
+        resource_gap = multi_worker_placement(resources, job, ssd, job_idx=i, scheduler=scheduler, data_place_alg=data_place_alg)    
         if resource_gap > 0:
-            break
+            # if len(running_jobs) == 0:
+            #     print(cluster)
+            #     total_req_gpu = sum([job['gpu'] for job in log['jobs']])
+            #     print('req gpu', total_req_gpu)
+            #     # print(log)
+            #     # print(job)
+            #     exit(0)
+            assert len(running_jobs) > 0
+            submit_time = submit_time + timedelta(seconds=10)
+            continue
 
         if i == 0 and resource_gap == 0:
             for chunk in job['chunks']:
+                assert len(job['location']) > 0
+                assert chunk['Location'] is not None
                 chunk['ExistOnHDD'] = True
                 chunk['ExistOnSSD'] = True
-                # print(f"Data placement for dltdeploy {job['dltdeploy_id']} -- {chunk['ETag']} location: {chunk.get('Location', None)}, source: {chunk.get('SourceLocation', None)}")
             chunks_placement = deepcopy(job['chunks'])
-
-        # for chunk in job.chunks:
-        #     logger.info(f"verify job {job.dltdeploy_id}-{job.job_id} -- {chunk['ETag']} locations: {chunk.get('Location', None)}, source: {chunk.get('SourceLocation', None)}")
-
-    # reset
-    # for job in jobs:
-    #     for chunk in job['chunks']:
-    #         chunk['ExistOnHDD'] = False
-    #         chunk['ExistOnSSD'] = False
-
-    # since all jobs are sharing the same dataset, they should have same storage gap
-    return np.max(resource_gaps)
+        job['deployed'] = True
+        i += 1
+        job['last'] = i == len(jobs)
+        running_jobs.append(job)
+        
+    return True
 
 
 def generate_random_ip():
@@ -255,11 +393,12 @@ def generate_random_ip():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--sch", type=str, choices=['ours', 'ff', 'bf'], default='ours')
+    parser.add_argument("--sch", type=str, choices=['ours', 'ff', 'bf', 'wf', 'csa'], default='ours')
     parser.add_argument("--cluster", type=str, choices=['venus', 'earth', 'saturn', 'uranus'], default='venus')
+    parser.add_argument("--sj", action='store_true', default=False)
     args = parser.parse_args()
     
-    base_dir = f'./clusters/{args.cluster}/' 
+    base_dir = f'./experiments/{args.cluster}/' 
     with open(f'{base_dir}/{args.cluster}.json', 'r') as f:
         trace = json.load(f)
     trace.sort(key=lambda x: x['submit_time'])
@@ -270,62 +409,30 @@ if __name__ == "__main__":
     total_nodes = {'venus': 133, 'uranus': 264, 'earth': 143, 'saturn': 262}
     num_cpus = {'venus': 48, 'uranus': 64, 'earth': 48, 'saturn': 64}
     nodes = [generate_random_ip() for _ in range(total_nodes[args.cluster])]
-    for res, s in [('gpu', 8), ('cpu', num_cpus[args.cluster]), ('ssd', np.inf)]:
+    for res, s in [('gpu', 8), ('cpu', num_cpus[args.cluster]), ('ssd', 2000)]:
         cluster[res] = {}
         for node in nodes:
             cluster[res][node] = s
 
-    running_jobs = defaultdict(dict)
+    running_jobs = []
 
-    lidx = 0
-    while lidx < len(trace):
-        log = deepcopy(trace[lidx])
-        # check whether to release resources
-        start_time = datetime.strptime(log['submit_time'], "%Y-%m-%d %H:%M:%S")
-
-        for deploy in list(running_jobs.keys()):
-            unfinished_jobs = []
-            for i, hist_job in enumerate(running_jobs[deploy]):
-                # print(start_time, hist_job['end_time'])
-                if start_time > datetime.strptime(hist_job['end_time'], "%Y-%m-%d %H:%M:%S"):
-                    for loc in hist_job['location']:
-                        cluster['cpu'][loc] += hist_job['cpu']
-                        cluster['gpu'][loc] += hist_job['gpu']
-                        for chunk in hist_job['chunks']:
-                            if chunk['Location'] == loc:
-                                cluster['ssd'][chunk['Location']] += chunk['ChunkSize']
-                else:
-                    unfinished_jobs.append(i)
-
-            if len(unfinished_jobs) == 0:
-                results.append(running_jobs[deploy])
-                del running_jobs[deploy]
-            else:
-                running_jobs[deploy] = [running_jobs[deploy][i] for i in unfinished_jobs]
-
+    t = 0
+    print(args.cluster, len(trace))
+    for log in trace:
         for job in log['jobs']:
             job['dltdeploy_id'] = log['deploy_id']
             job['chunks'] = log['datasource']['chunks']
+            job['deployed'] = False
 
         # schedule the job
-        if len(log['jobs']) > 1:
-            resource_gaps = multi_job_placement(cluster, log['jobs'], scheduler=args.sch)
-        elif log['jobs'][0]['numWorkers'] > 1:
-            resource_gaps = multi_worker_placement(cluster, log['jobs'][0], scheduler=args.sch)
-        else:
-            resource_gaps = base_placement(cluster, log['jobs'][0], worker_idx=0, scheduler=args.sch)
-
-        if resource_gaps > 0:
-            print(log)
-            trace[lidx]['submit_time'] = (datetime.strptime(log['submit_time'], "%Y-%m-%d %H:%M:%S") + timedelta(seconds=100)).strftime("%Y-%m-%d %H:%M:%S")
-            continue
-        else:
-            lidx += 1
-
-        # print(log['jobs'])
-        running_jobs[job['dltdeploy_id']] = log['jobs']
+        multi_job_placement(cluster, log, running_jobs, scheduler=args.sch, sort_jobs=args.sj)
+        
+        if t % 500 == 0:
+            print(args.cluster, t)
+        t += 1
     
-    with open(f'{base_dir}/{args.sch}.json', 'w') as f:
+    s = '-s' if args.sj else ''
+    with open(f'{base_dir}/{args.sch}{s}.json', 'w') as f:
         json.dump(results, f, indent=4)
         
-    # print(cluster)
+    print(cluster)
